@@ -1,376 +1,353 @@
+// Weather App JavaScript
+
+// API Configuration
+const API_KEY = ''; // You need to get a free API key from OpenWeatherMap
+const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
 // DOM Elements
-const navToggle = document.getElementById('nav-toggle');
-const navMenu = document.getElementById('nav-menu');
-const navLinks = document.querySelectorAll('.nav-link');
-const navbar = document.getElementById('navbar');
-const contactForm = document.getElementById('contact-form');
+const searchBtn = document.getElementById('searchBtn');
+const locationBtn = document.getElementById('locationBtn');
+const cityInput = document.getElementById('cityInput');
+const loading = document.getElementById('loading');
+const errorMessage = document.getElementById('errorMessage');
+const errorText = document.getElementById('errorText');
 
-// Mobile Navigation Toggle
-navToggle.addEventListener('click', () => {
-    navMenu.classList.toggle('active');
-    navToggle.classList.toggle('active');
+// Weather display elements
+const weatherIcon = document.getElementById('weatherIcon');
+const temperature = document.getElementById('temperature');
+const cityName = document.getElementById('cityName');
+const weatherDescription = document.getElementById('weatherDescription');
+const visibility = document.getElementById('visibility');
+const humidity = document.getElementById('humidity');
+const windSpeed = document.getElementById('windSpeed');
+const feelsLike = document.getElementById('feelsLike');
+const pressure = document.getElementById('pressure');
+const uvIndex = document.getElementById('uvIndex');
+const forecastContainer = document.getElementById('forecastContainer');
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Check if API key is set
+    if (!API_KEY) {
+        showApiKeyError();
+        return;
+    }
+    
+    // Try to get user's current location on page load
+    getCurrentLocationWeather();
 });
 
-// Close mobile menu when clicking on a link
-navLinks.forEach(link => {
-    link.addEventListener('click', () => {
-        navMenu.classList.remove('active');
-        navToggle.classList.remove('active');
-    });
-});
+searchBtn.addEventListener('click', handleSearch);
+locationBtn.addEventListener('click', getCurrentLocationWeather);
 
-// Navbar scroll effect
-window.addEventListener('scroll', () => {
-    if (window.scrollY > 100) {
-        navbar.style.background = 'rgba(255, 255, 255, 0.98)';
-        navbar.style.boxShadow = '0 2px 20px rgba(0, 0, 0, 0.1)';
-    } else {
-        navbar.style.background = 'rgba(255, 255, 255, 0.95)';
-        navbar.style.boxShadow = 'none';
+// Handle Enter key in search input
+cityInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        handleSearch();
     }
 });
 
-// Smooth scrolling for anchor links
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-            target.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start'
-            });
-        }
-    });
-});
+// Functions
+function showApiKeyError() {
+    errorText.textContent = 'API key is missing. Please get a free API key from OpenWeatherMap and add it to the script.js file.';
+    errorMessage.classList.add('show');
+}
 
-// Active navigation link highlighting
-const sections = document.querySelectorAll('section');
-const observerOptions = {
-    threshold: 0.3,
-    rootMargin: '-70px 0px -70px 0px'
-};
+function showLoading() {
+    loading.classList.add('show');
+    errorMessage.classList.remove('show');
+}
 
-const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            // Remove active class from all nav links
-            navLinks.forEach(link => link.classList.remove('active'));
-            
-            // Add active class to current section nav link
-            const activeLink = document.querySelector(`.nav-link[href="#${entry.target.id}"]`);
-            if (activeLink) {
-                activeLink.classList.add('active');
+function hideLoading() {
+    loading.classList.remove('show');
+}
+
+function showError(message) {
+    errorText.textContent = message;
+    errorMessage.classList.add('show');
+    hideLoading();
+}
+
+function hideError() {
+    errorMessage.classList.remove('show');
+}
+
+function handleSearch() {
+    const city = cityInput.value.trim();
+    if (city) {
+        getWeatherByCity(city);
+    }
+}
+
+function getCurrentLocationWeather() {
+    if (navigator.geolocation) {
+        showLoading();
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                getWeatherByCoords(latitude, longitude);
+            },
+            (error) => {
+                hideLoading();
+                let message = 'Unable to get your location. ';
+                switch (error.code) {
+                    case error.PERMISSION_DENIED:
+                        message += 'Location access denied.';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        message += 'Location information unavailable.';
+                        break;
+                    case error.TIMEOUT:
+                        message += 'Location request timed out.';
+                        break;
+                    default:
+                        message += 'An unknown error occurred.';
+                }
+                showError(message);
+            }
+        );
+    } else {
+        showError('Geolocation is not supported by this browser.');
+    }
+}
+
+async function getWeatherByCity(city) {
+    if (!API_KEY) {
+        showApiKeyError();
+        return;
+    }
+    
+    showLoading();
+    try {
+        const response = await fetch(`${BASE_URL}/weather?q=${city}&appid=${API_KEY}&units=metric`);
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('City not found. Please check the spelling and try again.');
+            } else if (response.status === 401) {
+                throw new Error('Invalid API key. Please check your API configuration.');
+            } else {
+                throw new Error('Failed to fetch weather data. Please try again.');
             }
         }
-    });
-}, observerOptions);
-
-sections.forEach(section => {
-    observer.observe(section);
-});
-
-// Animate elements on scroll
-const animateOnScroll = () => {
-    const elements = document.querySelectorAll('.skill-category, .project-card, .stat');
-    
-    elements.forEach(element => {
-        const elementTop = element.getBoundingClientRect().top;
-        const windowHeight = window.innerHeight;
         
-        if (elementTop < windowHeight * 0.8) {
-            element.style.opacity = '1';
-            element.style.transform = 'translateY(0)';
-        }
-    });
-};
+        const data = await response.json();
+        displayCurrentWeather(data);
+        getForecast(data.coord.lat, data.coord.lon);
+    } catch (error) {
+        showError(error.message);
+    }
+}
 
-// Initialize animation styles
-document.querySelectorAll('.skill-category, .project-card, .stat').forEach(element => {
-    element.style.opacity = '0';
-    element.style.transform = 'translateY(50px)';
-    element.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-});
-
-window.addEventListener('scroll', animateOnScroll);
-window.addEventListener('load', animateOnScroll);
-
-// Contact form handling
-contactForm.addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    // Get form data
-    const formData = new FormData(this);
-    const name = formData.get('name');
-    const email = formData.get('email');
-    const subject = formData.get('subject');
-    const message = formData.get('message');
-    
-    // Simple validation
-    if (!name || !email || !subject || !message) {
-        showNotification('Please fill in all fields', 'error');
+async function getWeatherByCoords(lat, lon) {
+    if (!API_KEY) {
+        showApiKeyError();
         return;
     }
     
-    if (!isValidEmail(email)) {
-        showNotification('Please enter a valid email address', 'error');
-        return;
+    try {
+        const response = await fetch(`${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch weather data for your location.');
+        }
+        
+        const data = await response.json();
+        displayCurrentWeather(data);
+        getForecast(lat, lon);
+    } catch (error) {
+        showError(error.message);
     }
-    
-    // Simulate form submission
-    showNotification('Message sent successfully! I\'ll get back to you soon.', 'success');
-    this.reset();
-});
-
-// Email validation function
-function isValidEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
 }
 
-// Notification system
-function showNotification(message, type) {
-    // Remove existing notifications
-    const existingNotification = document.querySelector('.notification');
-    if (existingNotification) {
-        existingNotification.remove();
+async function getForecast(lat, lon) {
+    try {
+        const response = await fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch forecast data.');
+        }
+        
+        const data = await response.json();
+        displayForecast(data);
+        hideLoading();
+    } catch (error) {
+        console.error('Forecast error:', error);
+        hideLoading();
+        // Don't show error for forecast, just log it
     }
+}
+
+function displayCurrentWeather(data) {
+    // Update weather icon
+    const iconCode = data.weather[0].icon;
+    weatherIcon.className = getWeatherIcon(iconCode);
     
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            <span>${message}</span>
-            <button class="notification-close">&times;</button>
+    // Update main weather info
+    temperature.textContent = Math.round(data.main.temp);
+    cityName.textContent = `${data.name}, ${data.sys.country}`;
+    weatherDescription.textContent = data.weather[0].description;
+    
+    // Update weather details
+    visibility.textContent = data.visibility ? `${(data.visibility / 1000).toFixed(1)} km` : '--';
+    humidity.textContent = `${data.main.humidity}%`;
+    windSpeed.textContent = `${(data.wind.speed * 3.6).toFixed(1)} km/h`;
+    feelsLike.textContent = `${Math.round(data.main.feels_like)}°C`;
+    pressure.textContent = `${data.main.pressure} hPa`;
+    
+    // UV Index would require an additional API call, so we'll show a placeholder
+    uvIndex.textContent = '--';
+    
+    // Clear search input
+    cityInput.value = '';
+}
+
+function displayForecast(data) {
+    // Get daily forecasts (one per day for next 5 days)
+    const dailyForecasts = getDailyForecasts(data.list);
+    
+    forecastContainer.innerHTML = '';
+    
+    dailyForecasts.forEach(forecast => {
+        const forecastCard = createForecastCard(forecast);
+        forecastContainer.appendChild(forecastCard);
+    });
+}
+
+function getDailyForecasts(forecastList) {
+    const dailyData = {};
+    
+    forecastList.forEach(item => {
+        const date = new Date(item.dt * 1000).toDateString();
+        if (!dailyData[date]) {
+            dailyData[date] = {
+                date: item.dt,
+                temps: [],
+                weather: item.weather[0],
+                humidity: item.main.humidity,
+                windSpeed: item.wind.speed
+            };
+        }
+        dailyData[date].temps.push(item.main.temp);
+    });
+    
+    // Convert to array and get first 5 days
+    return Object.values(dailyData).slice(0, 5).map(day => ({
+        ...day,
+        tempMax: Math.round(Math.max(...day.temps)),
+        tempMin: Math.round(Math.min(...day.temps))
+    }));
+}
+
+function createForecastCard(forecast) {
+    const card = document.createElement('div');
+    card.className = 'forecast-card';
+    
+    const date = new Date(forecast.date * 1000);
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+    
+    card.innerHTML = `
+        <div class="forecast-day">${dayName}</div>
+        <div class="forecast-icon">
+            <i class="${getWeatherIcon(forecast.weather.icon)}"></i>
         </div>
-    `;
-    
-    // Add notification styles
-    notification.style.cssText = `
-        position: fixed;
-        top: 90px;
-        right: 20px;
-        z-index: 1001;
-        padding: 1rem 1.5rem;
-        border-radius: 10px;
-        color: white;
-        font-weight: 500;
-        transform: translateX(100%);
-        transition: transform 0.3s ease;
-        max-width: 400px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-    `;
-    
-    if (type === 'success') {
-        notification.style.background = 'linear-gradient(45deg, #10b981, #059669)';
-    } else {
-        notification.style.background = 'linear-gradient(45deg, #ef4444, #dc2626)';
-    }
-    
-    document.body.appendChild(notification);
-    
-    // Animate in
-    setTimeout(() => {
-        notification.style.transform = 'translateX(0)';
-    }, 100);
-    
-    // Add close functionality
-    const closeBtn = notification.querySelector('.notification-close');
-    closeBtn.addEventListener('click', () => {
-        notification.style.transform = 'translateX(100%)';
-        setTimeout(() => notification.remove(), 300);
-    });
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.transform = 'translateX(100%)';
-            setTimeout(() => notification.remove(), 300);
-        }
-    }, 5000);
-}
-
-// Typing animation for hero title
-function typeWriter(element, text, speed = 100) {
-    let i = 0;
-    element.innerHTML = '';
-    
-    function type() {
-        if (i < text.length) {
-            element.innerHTML += text.charAt(i);
-            i++;
-            setTimeout(type, speed);
-        }
-    }
-    
-    type();
-}
-
-// Initialize typing animation when page loads
-window.addEventListener('load', () => {
-    const heroTitle = document.querySelector('.hero-title');
-    if (heroTitle) {
-        const originalText = heroTitle.innerHTML;
-        setTimeout(() => {
-            typeWriter(heroTitle, originalText, 50);
-        }, 1000);
-    }
-});
-
-// Parallax effect for hero section
-window.addEventListener('scroll', () => {
-    const scrolled = window.pageYOffset;
-    const hero = document.querySelector('.hero');
-    if (hero) {
-        hero.style.transform = `translateY(${scrolled * 0.5}px)`;
-    }
-});
-
-// Skills hover effect with sound (visual feedback)
-document.querySelectorAll('.skill-item').forEach(item => {
-    item.addEventListener('mouseenter', function() {
-        this.style.transform = 'scale(1.1) rotate(5deg)';
-    });
-    
-    item.addEventListener('mouseleave', function() {
-        this.style.transform = 'scale(1) rotate(0deg)';
-    });
-});
-
-// Project card 3D hover effect
-document.querySelectorAll('.project-card').forEach(card => {
-    card.addEventListener('mousemove', function(e) {
-        const rect = this.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-        
-        const rotateX = (y - centerY) / 10;
-        const rotateY = (centerX - x) / 10;
-        
-        this.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-10px)`;
-    });
-    
-    card.addEventListener('mouseleave', function() {
-        this.style.transform = 'perspective(1000px) rotateX(0) rotateY(0) translateY(-10px)';
-    });
-});
-
-// Counter animation for stats
-function animateCounter(element, target, duration = 2000) {
-    let start = 0;
-    const increment = target / (duration / 16);
-    
-    function updateCounter() {
-        start += increment;
-        if (start < target) {
-            element.textContent = Math.floor(start) + '+';
-            requestAnimationFrame(updateCounter);
-        } else {
-            element.textContent = target + '+';
-        }
-    }
-    
-    updateCounter();
-}
-
-// Trigger counter animation when stats section is visible
-const statsObserver = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            const counters = entry.target.querySelectorAll('.stat h3');
-            counters.forEach(counter => {
-                const target = parseInt(counter.textContent);
-                animateCounter(counter, target);
-            });
-            statsObserver.unobserve(entry.target);
-        }
-    });
-}, { threshold: 0.5 });
-
-const statsSection = document.querySelector('.about-stats');
-if (statsSection) {
-    statsObserver.observe(statsSection);
-}
-
-// Add loading animation
-window.addEventListener('load', () => {
-    const loader = document.createElement('div');
-    loader.className = 'page-loader';
-    loader.innerHTML = `
-        <div class="loader-content">
-            <div class="loader-spinner"></div>
-            <p>Loading Portfolio...</p>
+        <div class="forecast-temps">
+            <span class="forecast-high">${forecast.tempMax}°</span>
+            <span class="forecast-low">${forecast.tempMin}°</span>
         </div>
+        <div class="forecast-desc">${forecast.weather.description}</div>
     `;
     
-    loader.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-        color: white;
-        font-family: 'Poppins', sans-serif;
-        opacity: 1;
-        transition: opacity 0.5s ease;
-    `;
+    return card;
+}
+
+function getWeatherIcon(iconCode) {
+    const iconMap = {
+        '01d': 'fas fa-sun',
+        '01n': 'fas fa-moon',
+        '02d': 'fas fa-cloud-sun',
+        '02n': 'fas fa-cloud-moon',
+        '03d': 'fas fa-cloud',
+        '03n': 'fas fa-cloud',
+        '04d': 'fas fa-clouds',
+        '04n': 'fas fa-clouds',
+        '09d': 'fas fa-cloud-rain',
+        '09n': 'fas fa-cloud-rain',
+        '10d': 'fas fa-cloud-sun-rain',
+        '10n': 'fas fa-cloud-moon-rain',
+        '11d': 'fas fa-bolt',
+        '11n': 'fas fa-bolt',
+        '13d': 'fas fa-snowflake',
+        '13n': 'fas fa-snowflake',
+        '50d': 'fas fa-smog',
+        '50n': 'fas fa-smog'
+    };
     
-    const spinnerCSS = `
-        .loader-spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top: 3px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 1rem;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .loader-content {
-            text-align: center;
-        }
-    `;
+    return iconMap[iconCode] || 'fas fa-question';
+}
+
+// Utility function to format date
+function formatDate(timestamp) {
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
+
+// Demo mode for when API key is not set
+function enableDemoMode() {
+    console.log('Demo mode enabled - using sample data');
     
-    const style = document.createElement('style');
-    style.textContent = spinnerCSS;
-    document.head.appendChild(style);
+    // Sample weather data for demo
+    const sampleData = {
+        name: 'Demo City',
+        sys: { country: 'XX' },
+        main: {
+            temp: 22,
+            feels_like: 25,
+            humidity: 65,
+            pressure: 1013
+        },
+        weather: [{
+            description: 'partly cloudy',
+            icon: '02d'
+        }],
+        wind: { speed: 3.5 },
+        visibility: 10000
+    };
     
-    document.body.appendChild(loader);
+    displayCurrentWeather(sampleData);
     
-    // Remove loader after a short delay
+    // Sample forecast data
+    const sampleForecast = [];
+    for (let i = 0; i < 5; i++) {
+        sampleForecast.push({
+            date: Date.now() / 1000 + (i * 24 * 60 * 60),
+            tempMax: 20 + Math.random() * 10,
+            tempMin: 15 + Math.random() * 5,
+            weather: {
+                description: ['sunny', 'cloudy', 'rainy', 'windy'][Math.floor(Math.random() * 4)],
+                icon: ['01d', '02d', '10d', '04d'][Math.floor(Math.random() * 4)]
+            }
+        });
+    }
+    
+    forecastContainer.innerHTML = '';
+    sampleForecast.forEach(forecast => {
+        const forecastCard = createForecastCard(forecast);
+        forecastContainer.appendChild(forecastCard);
+    });
+    
+    hideLoading();
+}
+
+// Initialize demo mode if no API key
+if (!API_KEY) {
     setTimeout(() => {
-        loader.style.opacity = '0';
-        setTimeout(() => {
-            loader.remove();
-            style.remove();
-        }, 500);
-    }, 1500);
-});
-
-// Add CSS for active nav link
-const activeNavCSS = `
-    .nav-link.active {
-        color: #6366f1 !important;
-    }
-    .nav-link.active::after {
-        width: 100% !important;
-    }
-`;
-
-const activeStyle = document.createElement('style');
-activeStyle.textContent = activeNavCSS;
-document.head.appendChild(activeStyle);
+        hideError();
+        enableDemoMode();
+    }, 3000);
+}
